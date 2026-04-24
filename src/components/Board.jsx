@@ -1,37 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Column from './Column';
 
-const initialData = {
-  tasks: {
-    'task-1': { id: 'task-1', content: 'Design aesthetic Kanban UI', tag: 'UI/UX', date: 'Apr 24' },
-    'task-2': { id: 'task-2', content: 'Initialize Vite React App', tag: 'Setup', date: 'Apr 24' },
-    'task-3': { id: 'task-3', content: 'Implement Drag and Drop functionality', tag: 'Feature', date: 'Apr 25' },
-    'task-4': { id: 'task-4', content: 'Apply Glassmorphism styling', tag: 'CSS', date: 'Apr 25' },
-    'task-5': { id: 'task-5', content: 'Test user experience flows', tag: 'QA', date: 'Apr 26' },
-    'task-6': { id: 'task-6', content: 'Refactor components', tag: 'Tech Debt', date: 'Apr 26' },
-  },
-  columns: {
-    'column-1': {
-      id: 'column-1',
-      title: 'To Do',
-      taskIds: ['task-3', 'task-5', 'task-6'],
-    },
-    'column-2': {
-      id: 'column-2',
-      title: 'In Progress',
-      taskIds: ['task-4'],
-    },
-    'column-3': {
-      id: 'column-3',
-      title: 'Completed',
-      taskIds: ['task-1', 'task-2'],
-    },
-  },
-  columnOrder: ['column-1', 'column-2', 'column-3'],
-};
-
-const Board = () => {
-  const [data, setData] = useState(initialData);
+const Board = ({ data, setData }) => {
 
   const onDrop = (e, targetColumnId) => {
     const taskId = e.dataTransfer.getData('text/plain');
