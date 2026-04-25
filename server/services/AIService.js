@@ -2,8 +2,55 @@ import { GoogleGenAI } from '@google/genai';
 
 class AIService {
   constructor() {
-    // Initialize the Gemini client. It automatically picks up GEMINI_API_KEY from process.env
-    this.ai = new GoogleGenAI();
+    // We will initialize it lazily in generateTasksForGoal
+  }
+
+  /**
+   * Helper orchestration method that uses Hugging Face Zero-Shot Classification 
+   * to strictly categorize a given task description into a predefined bucket.
+   */
+  async categorizeTaskWithHF(text) {
+    if (!process.env.HF_API_KEY) {
+      console.warn("[AIService] Missing HF_API_KEY. Defaulting task tag.");
+      return "AI Generated";
+    }
+
+    try {
+      const response = await fetch("https://api-inference.huggingface.co/models/facebook/bart-large-mnli", {
+        headers: {
+          Authorization: `Bearer ${process.env.HF_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+        body: JSON.stringify({
+          inputs: text,
+          parameters: {
+            candidate_labels: ["Frontend", "Backend", "Logistics", "Design", "QA"],
+          },
+        }),
+      });
+
+      const result = await response.json();
+
+      // If error occurs (like model loading), it returns { error: "Model ... is currently loading" }
+      if (result.error) {
+        console.warn("[AIService] HuggingFace API returned an issue:", result.error);
+        return "Categorizing..."; // Provide a graceful fallback
+      }
+
+      // Extract highest confidence label
+      if (Array.isArray(result) && result.length > 0) {
+        return result[0].labels[0];
+      } else if (result.labels && result.labels.length > 0) {
+        return result.labels[0];
+      }
+
+      return "Uncategorized";
+
+    } catch (err) {
+      console.error("[AIService] HF Categorization Request Failed:", err);
+      return "AI Generated";
+    }
   }
 
   /**
@@ -17,6 +64,8 @@ class AIService {
       throw new Error("GEMINI_API_KEY is missing in server/.env");
     }
 
+    const aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
     const { timeframe, teamSize, strictness } = context;
 
     // Construct the prompt payload
@@ -26,7 +75,7 @@ class AIService {
 
     try {
       // Call Gemini 2.5 Flash for fast structured generation
-      const response = await this.ai.models.generateContent({
+      const response = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
           { role: 'user', parts: [{ text: systemPrompt + '\n\n' + userPrompt }] }
@@ -61,14 +110,29 @@ class AIService {
       }
 
       // Map the generic {title, description} to the frontend Kanaban schema { id, content, tag, date }
-      const mappedTasks = parsedArray.map((item, index) => ({
+      const initialMappedTasks = parsedArray.map((item, index) => ({
         id: `ai-${Date.now()}-${index}`,
         content: `${item.title}: ${item.description}`,
-        tag: 'Phase ' + (Math.floor(index / 3) + 1), // Pseudo tagging based on sequence
+        tag: 'Pending',
         date: 'Scheduled'
       }));
 
-      return mappedTasks;
+      console.log(`[AIService] Step 1 Complete. Initiating Hugging Face Orchestration for ${initialMappedTasks.length} tasks...`);
+
+      // STEP 2: Agentic Orchestration Loop
+      const categorizedTasks = await Promise.all(
+        initialMappedTasks.map(async (task) => {
+          const categorizedTag = await this.categorizeTaskWithHF(task.content);
+          return {
+            ...task,
+            tag: categorizedTag
+          };
+        })
+      );
+
+      console.log(`[AIService] Step 2 Complete. Orchestration mapping finished.`);
+
+      return categorizedTasks;
 
     } catch (error) {
       console.error("[AIService] Gemini API Error:", error);
