@@ -1,16 +1,26 @@
-# React + Vite
+# 🚀 AI Task Deconstructor
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An AI-powered project management dashboard that takes overwhelming, high-level goals and automatically breaks them down into an actionable, categorized Kanban workflow. 
 
-Currently, two official plugins are available:
+Unlike standard chat interfaces, this application utilizes a **multi-model AI Pipeline** to not only generate sub-tasks but autonomously categorize and prioritize them using zero-shot classification before rendering them in an interactive drag-and-drop UI.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-## React Compiler
+## ✨ Features
+* **Intelligent Task Generation:** Input a single broad goal, and the integrated LLM acts as a virtual project manager, breaking the project down into 10-15 highly granular steps.
+* **Automated Categorization:** Leverages Hugging Face zero-shot classification to automatically analyze the context of each generated task, assigning departmental tags (e.g., Engineering, Marketing, Design) and priority levels.
+* **Interactive Kanban Board:** Fully functional drag-and-drop interface to manage tasks across "To Do", "In Progress", and "Done" states.
+* **Seamless API Pipeline:** A custom REST API backend orchestrates the strict data flow between the client, the LLM generation engine, and the Hugging Face analysis model.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Tech Stack
+* **Frontend:** React, Vite, [Insert State Management e.g., Zustand/Redux], [Insert Drag-and-Drop library e.g., dnd-kit]
+* **Backend:** REST API built with [Insert Python/FastAPI or Node/Express]
+* **Generative AI:** [Insert Gemini/OpenAI/Claude] API for structured JSON task generation
+* **Machine Learning:** Hugging Face Inference API (`facebook/bart-large-mnli`) for zero-shot text classification
 
-## Expanding the ESLint configuration
+## 🧠 Architecture Flow
+This application utilizes a deterministic AI Pipeline (rather than autonomous agents) to ensure high reliability, speed, and strict JSON formatting:
+1. **User Input:** Client submits a complex goal via the React frontend.
+2. **Generation Phase:** The backend routes the prompt to the LLM with strict formatting instructions to output an array of task objects.
+3. **Enrichment Phase:** The backend iterates through the generated array, piping each task description through a Hugging Face classification model to append categorical labels and priority scores.
+4. **Render:** The enriched JSON payload is returned to the client and dynamically mapped to the interactive Kanban board.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
