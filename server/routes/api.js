@@ -1,10 +1,53 @@
 import express from 'express';
-import TaskController from '../controllers/TaskController.js';
+import AuthController from '../controllers/AuthController.js';
+import ProjectController from '../controllers/ProjectController.js';
+import ProjectTaskController from '../controllers/ProjectTaskController.js';
+import { createAuthenticate } from '../middleware/authenticate.js';
+import ProjectRepository from '../repositories/projectRepository.js';
+import TaskRepository from '../repositories/taskRepository.js';
+import UserRepository from '../repositories/userRepository.js';
+import { createAuthRouter } from './auth.js';
+import { createProjectRouter } from './projects.js';
 
-const router = express.Router();
-const taskController = new TaskController();
+export function createApiRouter({
+  userRepository = new UserRepository(),
+  projectRepository = new ProjectRepository(),
+  taskRepository = new TaskRepository(),
+  authController,
+  projectController,
+  projectTaskController,
+  authenticate,
+  aiService,
+  aiRateLimitConfig,
+  authRateLimitConfig,
+} = {}) {
+  const router = express.Router();
+  const authMiddleware = authenticate || createAuthenticate({ userRepository });
+  const resolvedAuthController = authController || new AuthController({
+    userRepository,
+  });
+  const resolvedProjectController = projectController || new ProjectController(
+    projectRepository,
+  );
+  const resolvedTaskController = projectTaskController
+    || new ProjectTaskController({
+      projectRepository,
+      taskRepository,
+      aiService,
+    });
 
-// Primary AI endpoint
-router.post('/generate-tasks', (req, res) => taskController.generateTasks(req, res));
+  router.use('/auth', createAuthRouter({
+    authController: resolvedAuthController,
+    authenticate: authMiddleware,
+    rateLimitConfig: authRateLimitConfig,
+  }));
+  router.use('/projects', authMiddleware, createProjectRouter({
+    projectController: resolvedProjectController,
+    taskController: resolvedTaskController,
+    rateLimitConfig: aiRateLimitConfig,
+  }));
 
-export default router;
+  return router;
+}
+
+export default createApiRouter;

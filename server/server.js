@@ -1,36 +1,54 @@
-import express from 'express';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import express from 'express';
 import { pathToFileURL } from 'node:url';
-import apiRoutes from './routes/api.js';
+import { checkDatabaseHealth } from './config/database.js';
+import { createCorsOptions, parseAllowedOrigins } from './middleware/cors.js';
+import {
+  createErrorHandler,
+  notFoundHandler,
+} from './middleware/errorHandler.js';
+import { createApiRouter } from './routes/api.js';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
-export function createApp() {
+export function createApp({
+  allowedOrigins = parseAllowedOrigins(),
+  bodyLimit = process.env.JSON_BODY_LIMIT || '20kb',
+  environment = process.env.NODE_ENV,
+  databaseHealthCheck = checkDatabaseHealth,
+  apiDependencies = {},
+} = {}) {
   const app = express();
 
-  app.use(cors());
-  app.use(express.json({ limit: '20kb' }));
+  app.disable('x-powered-by');
+  app.use(cors(createCorsOptions(allowedOrigins)));
+  app.use(cookieParser());
+  app.use(express.json({ limit: bodyLimit }));
 
-  app.use('/api', apiRoutes);
-
-  app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Cosmic Flow API is running' });
-  });
-
-  app.use((error, req, res, next) => {
-    if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
-      return res.status(400).json({
+  app.get('/health', async (req, res) => {
+    try {
+      await databaseHealthCheck();
+      return res.json({
+        success: true,
+        services: { api: 'healthy', database: 'healthy' },
+      });
+    } catch {
+      return res.status(503).json({
         success: false,
+        services: { api: 'healthy', database: 'unhealthy' },
         error: {
-          code: 'INVALID_JSON',
-          message: 'Request body contains invalid JSON.',
+          code: 'DATABASE_UNAVAILABLE',
+          message: 'The database is unavailable.',
         },
       });
     }
-
-    return next(error);
   });
+
+  app.use('/api', createApiRouter(apiDependencies));
+  app.use(notFoundHandler);
+  app.use(createErrorHandler(environment));
 
   return app;
 }
@@ -42,8 +60,7 @@ export function startServer(port = process.env.PORT || 3000) {
   });
 }
 
-const isDirectRun =
-  process.argv[1]
+const isDirectRun = process.argv[1]
   && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isDirectRun) {

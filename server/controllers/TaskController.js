@@ -1,6 +1,8 @@
 import AIService from '../services/AIService.js';
-import AppError from '../utils/AppError.js';
-import { validateGenerateTasksRequest } from '../utils/taskValidation.js';
+import {
+  validateGenerateTasksRequest,
+  validateRegenerateTaskRequest,
+} from '../utils/taskValidation.js';
 
 class TaskController {
   constructor(aiService = new AIService()) {
@@ -8,43 +10,42 @@ class TaskController {
   }
 
   async generateTasks(req, res) {
-    try {
-      const {
-        goal,
-        timeframe,
-        teamSize,
-        strictness,
-      } = validateGenerateTasksRequest(req.body);
-      const tasks = await this.aiService.generateTasksForGoal(goal, {
-        timeframe,
-        teamSize,
-        strictness,
-      });
+    const {
+      goal,
+      timeframe,
+      teamSize,
+      strictness,
+    } = validateGenerateTasksRequest(req.body);
+    const tasks = await this.aiService.generateTasksForGoal(goal, {
+      timeframe,
+      teamSize,
+      strictness,
+    });
 
-      return res.status(200).json({
-        success: true,
-        data: tasks,
-      });
-    } catch (error) {
-      const isKnownError = error instanceof AppError;
-      const statusCode = isKnownError ? error.statusCode : 500;
-      const code = isKnownError ? error.code : 'INTERNAL_ERROR';
-      const message = isKnownError
-        ? error.message
-        : 'An unexpected error occurred while generating tasks.';
+    return res.status(200).json({
+      success: true,
+      data: tasks,
+    });
+  }
 
-      if (!isKnownError) {
-        console.error('Task generation failed with an unexpected error.');
-      }
+  async regenerateTask(req, res) {
+    const {
+      goal,
+      timeframe,
+      teamSize,
+      strictness,
+      task,
+    } = validateRegenerateTaskRequest(req.body);
+    const replacement = await this.aiService.regenerateTask(
+      goal,
+      { timeframe, teamSize, strictness },
+      task,
+    );
 
-      return res.status(statusCode).json({
-        success: false,
-        error: {
-          code,
-          message,
-        },
-      });
-    }
+    return res.status(200).json({
+      success: true,
+      data: replacement,
+    });
   }
 }
 

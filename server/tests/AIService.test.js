@@ -202,3 +202,73 @@ test('limits simultaneous Hugging Face classification requests', async () => {
   await service.generateTasksForGoal('Build a product', {});
   assert.equal(maximumActiveRequests, 2);
 });
+
+test('regenerates a valid task while preserving status', async () => {
+  const service = new AIService({
+    aiClientFactory: () => createAiClient(JSON.stringify({
+      title: 'Improved task',
+      description: 'A clearer and more actionable task description.',
+      priority: 'Medium',
+      estimatedDuration: '3 days',
+    })),
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => [{ label: 'Design', score: 0.9 }],
+    }),
+  });
+
+  const task = await service.regenerateTask('Launch a product', {}, {
+    title: 'Old task',
+    description: 'Old description',
+    category: 'Research',
+    priority: 'Low',
+    status: 'in-progress',
+    estimatedDuration: '1 day',
+  });
+
+  assert.equal(task.title, 'Improved task');
+  assert.equal(task.category, 'Design');
+  assert.equal(task.status, 'in-progress');
+});
+
+test('rejects malformed regenerated Gemini output', async () => {
+  const service = new AIService({
+    aiClientFactory: () => createAiClient('{invalid-json'),
+  });
+
+  await assert.rejects(
+    () => service.regenerateTask('Launch a product', {}, {
+      title: 'Old task',
+      description: 'Old description',
+      category: 'Research',
+      priority: 'Low',
+      status: 'todo',
+      estimatedDuration: '1 day',
+    }),
+    (error) => error.code === 'AI_RESPONSE_INVALID',
+  );
+});
+
+test('uses the classification fallback during regeneration', async () => {
+  const service = new AIService({
+    aiClientFactory: () => createAiClient(JSON.stringify({
+      title: 'Improved task',
+      description: 'A clearer task description.',
+      priority: 'High',
+      estimatedDuration: '2 days',
+    })),
+    fetchImpl: async () => ({ ok: false, status: 503 }),
+  });
+
+  const task = await service.regenerateTask('Launch a product', {}, {
+    title: 'Old task',
+    description: 'Old description',
+    category: 'Design',
+    priority: 'Low',
+    status: 'done',
+    estimatedDuration: '1 day',
+  });
+
+  assert.equal(task.category, 'Research');
+  assert.equal(task.status, 'done');
+});

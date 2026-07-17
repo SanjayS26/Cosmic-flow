@@ -4,10 +4,11 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node --use-system-ca server.js",
+    "dev": "node --use-system-ca ./node_modules/nodemon/bin/nodemon.js server.js",
+    "migrate": "node --use-system-ca scripts/runMigrations.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check controllers/TaskController.js && node --check services/AIService.js && node --check utils/AppError.js && node --check utils/taskValidation.js"
+    "check": "node scripts/checkSource.js"
   },
   "keywords": [],
   "author": "",
@@ -15,9 +16,14 @@
   "type": "module",
   "dependencies": {
     "@google/genai": "^1.50.1",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

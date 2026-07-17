@@ -5,6 +5,7 @@ import {
   TASK_CATEGORIES,
   TASK_PRIORITIES,
   validateCanonicalTask,
+  validateGeneratedTaskPayload,
   validateGeneratedTasksPayload,
 } from '../utils/taskValidation.js';
 
@@ -42,6 +43,8 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
   },
 };
+
+const GEMINI_TASK_SCHEMA = GEMINI_RESPONSE_SCHEMA.items;
 
 async function mapWithConcurrency(items, limit, mapper) {
   const results = new Array(items.length);
@@ -201,6 +204,103 @@ class AIService {
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
+      }
+
+      if (error?.status === 429) {
+        throw new AppError(
+          'AI_PROVIDER_RATE_LIMITED',
+          'The AI provider is temporarily busy. Please try again later.',
+          503,
+        );
+      }
+
+      throw new AppError(
+        'AI_PROVIDER_ERROR',
+        'The task-generation provider could not complete the request.',
+        502,
+      );
+    }
+  }
+
+  async regenerateTask(goal, context, currentTask) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new AppError(
+        'CONFIGURATION_ERROR',
+        'The task-generation service is not configured.',
+        500,
+      );
+    }
+
+    const aiClient = this.aiClientFactory(process.env.GEMINI_API_KEY);
+    const { timeframe, teamSize, strictness } = context;
+    const prompt = [
+      `Project goal: ${goal}`,
+      `Timeframe: ${timeframe || 'unspecified'}`,
+      `Team size: ${teamSize || 'unspecified'}`,
+      `Planning detail: ${strictness || 'unspecified'}`,
+      `Current task title: ${currentTask.title}`,
+      `Current task description: ${currentTask.description}`,
+      `Current priority: ${currentTask.priority}`,
+      `Current estimated duration: ${currentTask.estimatedDuration}`,
+      'Produce one improved, more specific replacement task.',
+    ].join('\n');
+
+    try {
+      const response = await aiClient.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          systemInstruction: [
+            'You are an expert project manager.',
+            'Improve one existing task without changing the project scope.',
+            'Return only the structured data requested by the response schema.',
+          ].join(' '),
+          responseMimeType: 'application/json',
+          responseJsonSchema: GEMINI_TASK_SCHEMA,
+          temperature: 0.2,
+        },
+      });
+
+      if (typeof response.text !== 'string' || !response.text.trim()) {
+        throw new AppError(
+          'AI_RESPONSE_INVALID',
+          'The AI provider returned an empty replacement task.',
+          502,
+        );
+      }
+
+      let parsedTask;
+      try {
+        parsedTask = JSON.parse(response.text);
+      } catch {
+        throw new AppError(
+          'AI_RESPONSE_INVALID',
+          'The AI provider returned malformed replacement JSON.',
+          502,
+        );
+      }
+
+      const replacement = validateGeneratedTaskPayload(parsedTask);
+      const category = await this.categorizeTaskWithHF(
+        `${replacement.title}. ${replacement.description}`,
+      );
+
+      return {
+        ...replacement,
+        category,
+        status: currentTask.status,
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      if (error?.status === 429) {
+        throw new AppError(
+          'AI_PROVIDER_RATE_LIMITED',
+          'The AI provider is temporarily busy. Please try again later.',
+          503,
+        );
       }
 
       throw new AppError(
