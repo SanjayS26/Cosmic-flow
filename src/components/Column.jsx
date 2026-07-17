@@ -1,7 +1,6 @@
-import React from 'react';
 import Task from './Task';
 
-const Column = ({ column, tasks, onDrop, onDragOver, onDragLeave }) => {
+const Column = ({ column, tasks, onDrop, deleteTask }) => {
   const handleDrop = (e) => {
     e.preventDefault();
     e.currentTarget.classList.remove('drag-over');
@@ -19,7 +18,7 @@ const Column = ({ column, tasks, onDrop, onDragOver, onDragLeave }) => {
   };
 
   return (
-    <div 
+    <div
       className="glass-panel column"
       onDrop={handleDrop}
       onDragOver={handleDragOver}
@@ -27,12 +26,16 @@ const Column = ({ column, tasks, onDrop, onDragOver, onDragLeave }) => {
     >
       <div className="heading-col">
         <span>{column.title}</span>
-        <span style={{opacity: 0.5, fontSize: '0.8rem'}}>{tasks.length}</span>
+        <span style={{ opacity: 0.5, fontSize: '0.8rem' }}>{tasks.length}</span>
       </div>
       <div className="task-list">
-        {tasks.map((task) => (
-          <Task key={task.id} task={task} />
-        ))}
+        {tasks.length > 0 ? (
+          tasks.map((task) => (
+            <Task key={task.id} task={task} deleteTask={deleteTask} />
+          ))
+        ) : (
+          <p className="column-empty">No tasks in this column.</p>
+        )}
       </div>
     </div>
   );

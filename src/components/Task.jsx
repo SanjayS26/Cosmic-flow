@@ -1,17 +1,22 @@
-import React from 'react';
-
-const Task = ({ task, onDragStart }) => {
+const Task = ({ task, deleteTask }) => {
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', task.id);
     e.dataTransfer.effectAllowed = 'move';
-    // Add a slight delay before adding dragging class for aesthetic visual feedback
+    const card = e.currentTarget;
     setTimeout(() => {
-      e.target.classList.add('dragging');
+      card.classList.add('dragging');
     }, 0);
   };
 
   const handleDragEnd = (e) => {
-    e.target.classList.remove('dragging');
+    e.currentTarget.classList.remove('dragging');
+  };
+
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    if (deleteTask && window.confirm('Delete this task?')) {
+      deleteTask(task.id);
+    }
   };
 
   return (
@@ -20,11 +25,18 @@ const Task = ({ task, onDragStart }) => {
       draggable="true"
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onContextMenu={handleContextMenu}
       id={task.id}
     >
-      {task.tag && <span className="task-tag">{task.tag}</span>}
-      <p className="text-body">{task.content}</p>
-      {task.date && <p className="text-meta">{task.date}</p>}
+      <div className="task-labels">
+        <span className="task-tag">{task.category}</span>
+        <span className={`priority-badge priority-${task.priority.toLowerCase()}`}>
+          {task.priority}
+        </span>
+      </div>
+      <h3 className="task-title">{task.title}</h3>
+      <p className="text-body task-description">{task.description}</p>
+      <p className="text-meta">Estimated: {task.estimatedDuration}</p>
     </div>
   );
 };

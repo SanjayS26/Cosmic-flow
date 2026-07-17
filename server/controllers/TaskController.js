@@ -1,36 +1,48 @@
 import AIService from '../services/AIService.js';
+import AppError from '../utils/AppError.js';
+import { validateGenerateTasksRequest } from '../utils/taskValidation.js';
 
 class TaskController {
-  constructor() {
-    this.aiService = new AIService();
+  constructor(aiService = new AIService()) {
+    this.aiService = aiService;
   }
 
   async generateTasks(req, res) {
     try {
-      const { goal, timeframe, teamSize, strictness } = req.body;
-
-      if (!goal) {
-        return res.status(400).json({ error: 'Goal is required to generate tasks.' });
-      }
-
-      // Delegate business logic to the AIService
+      const {
+        goal,
+        timeframe,
+        teamSize,
+        strictness,
+      } = validateGenerateTasksRequest(req.body);
       const tasks = await this.aiService.generateTasksForGoal(goal, {
         timeframe,
         teamSize,
-        strictness
+        strictness,
       });
 
       return res.status(200).json({
         success: true,
-        message: 'Tasks generated successfully',
-        data: tasks
+        data: tasks,
       });
-
     } catch (error) {
-      console.error('Error generating tasks:', error);
-      return res.status(500).json({
+      const isKnownError = error instanceof AppError;
+      const statusCode = isKnownError ? error.statusCode : 500;
+      const code = isKnownError ? error.code : 'INTERNAL_ERROR';
+      const message = isKnownError
+        ? error.message
+        : 'An unexpected error occurred while generating tasks.';
+
+      if (!isKnownError) {
+        console.error('Task generation failed with an unexpected error.');
+      }
+
+      return res.status(statusCode).json({
         success: false,
-        error: 'Failed to generate tasks using AI service.'
+        error: {
+          code,
+          message,
+        },
       });
     }
   }

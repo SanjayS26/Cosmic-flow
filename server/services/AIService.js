@@ -1,142 +1,213 @@
+import { randomUUID } from 'node:crypto';
 import { GoogleGenAI } from '@google/genai';
+import AppError from '../utils/AppError.js';
+import {
+  TASK_CATEGORIES,
+  TASK_PRIORITIES,
+  validateCanonicalTask,
+  validateGeneratedTasksPayload,
+} from '../utils/taskValidation.js';
 
-class AIService {
-  constructor() {
-    // We will initialize it lazily in generateTasksForGoal
+const HF_MODEL_URL =
+  'https://router.huggingface.co/hf-inference/models/facebook/bart-large-mnli';
+const FALLBACK_CATEGORY = 'Research';
+const DEFAULT_HF_CONCURRENCY = 3;
+const DEFAULT_HF_TIMEOUT_MS = 8000;
+
+const GEMINI_RESPONSE_SCHEMA = {
+  type: 'array',
+  minItems: 10,
+  maxItems: 15,
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['title', 'description', 'priority', 'estimatedDuration'],
+    properties: {
+      title: {
+        type: 'string',
+        description: 'A concise, action-oriented task title.',
+      },
+      description: {
+        type: 'string',
+        description: 'A specific and actionable explanation of the task.',
+      },
+      priority: {
+        type: 'string',
+        enum: TASK_PRIORITIES,
+      },
+      estimatedDuration: {
+        type: 'string',
+        description: 'A realistic duration such as 4 hours or 2 days.',
+      },
+    },
+  },
+};
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
   }
 
-  /**
-   * Helper orchestration method that uses Hugging Face Zero-Shot Classification 
-   * to strictly categorize a given task description into a predefined bucket.
-   */
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, () => worker()),
+  );
+
+  return results;
+}
+
+class AIService {
+  constructor({
+    aiClientFactory = (apiKey) => new GoogleGenAI({ apiKey }),
+    fetchImpl = globalThis.fetch,
+    uuidFactory = randomUUID,
+    hfConcurrency = DEFAULT_HF_CONCURRENCY,
+    hfTimeoutMs = DEFAULT_HF_TIMEOUT_MS,
+  } = {}) {
+    this.aiClientFactory = aiClientFactory;
+    this.fetchImpl = fetchImpl;
+    this.uuidFactory = uuidFactory;
+    this.hfConcurrency = hfConcurrency;
+    this.hfTimeoutMs = hfTimeoutMs;
+  }
+
   async categorizeTaskWithHF(text) {
     if (!process.env.HF_API_KEY) {
-      console.warn("[AIService] Missing HF_API_KEY. Defaulting task tag.");
-      return "AI Generated";
+      return FALLBACK_CATEGORY;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.hfTimeoutMs);
+
     try {
-      const response = await fetch("https://api-inference.huggingface.co/models/facebook/bart-large-mnli", {
+      const response = await this.fetchImpl(HF_MODEL_URL, {
         headers: {
           Authorization: `Bearer ${process.env.HF_API_KEY}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
-        method: "POST",
+        method: 'POST',
+        signal: controller.signal,
         body: JSON.stringify({
           inputs: text,
           parameters: {
-            candidate_labels: ["Frontend", "Backend", "Logistics", "Design", "QA"],
+            candidate_labels: TASK_CATEGORIES,
           },
         }),
       });
 
+      if (!response.ok) {
+        return FALLBACK_CATEGORY;
+      }
+
       const result = await response.json();
+      const category = Array.isArray(result) ? result[0]?.label : undefined;
 
-      // If error occurs (like model loading), it returns { error: "Model ... is currently loading" }
-      if (result.error) {
-        console.warn("[AIService] HuggingFace API returned an issue:", result.error);
-        return "Categorizing..."; // Provide a graceful fallback
+      if (
+        typeof category === 'string'
+        && TASK_CATEGORIES.includes(category)
+      ) {
+        return category;
       }
 
-      // Extract highest confidence label
-      if (Array.isArray(result) && result.length > 0) {
-        return result[0].labels[0];
-      } else if (result.labels && result.labels.length > 0) {
-        return result.labels[0];
-      }
-
-      return "Uncategorized";
-
-    } catch (err) {
-      console.error("[AIService] HF Categorization Request Failed:", err);
-      return "AI Generated";
+      return FALLBACK_CATEGORY;
+    } catch {
+      return FALLBACK_CATEGORY;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
-  /**
-   * Generates tasks securely from a user goal and context using Gemini LLM.
-   */
   async generateTasksForGoal(goal, context) {
-    console.log(`[AIService] Contacting Gemini for goal: "${goal}"`);
-    console.log(`[AIService] Context:`, context);
-
     if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is missing in server/.env");
+      throw new AppError(
+        'CONFIGURATION_ERROR',
+        'The task-generation service is not configured.',
+        500,
+      );
     }
 
-    const aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
+    const aiClient = this.aiClientFactory(process.env.GEMINI_API_KEY);
     const { timeframe, teamSize, strictness } = context;
-
-    // Construct the prompt payload
-    const systemPrompt = `You are an expert project manager. The user will give you a broad goal. Break this goal down into 10-15 actionable sub-tasks. You must return the output STRICTLY as a JSON array of objects, where each object has a 'title' and a 'description' property. Do not include markdown formatting or any other text.`;
-
-    const userPrompt = `Goal: ${goal}\nTimeframe: ${timeframe || 'unspecified'}\nTeam Size: ${teamSize || 'unspecified'}\nStrictness: ${strictness || 'unspecified'}`;
+    const systemPrompt = [
+      'You are an expert project manager.',
+      'Break the user goal into 10-15 concrete, actionable tasks.',
+      'Each task must include title, description, priority, and estimatedDuration.',
+      'Priority must be High, Medium, or Low.',
+      'Make durations realistic for the supplied context.',
+      'Return only the structured data requested by the response schema.',
+    ].join(' ');
+    const userPrompt = [
+      `Goal: ${goal}`,
+      `Timeframe: ${timeframe || 'unspecified'}`,
+      `Team size: ${teamSize || 'unspecified'}`,
+      `Planning detail: ${strictness || 'unspecified'}`,
+    ].join('\n');
 
     try {
-      // Call Gemini 2.5 Flash for fast structured generation
       const response = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [
-          { role: 'user', parts: [{ text: systemPrompt + '\n\n' + userPrompt }] }
-        ],
+        contents: userPrompt,
         config: {
-          // Force JSON schema configuration
-          responseMimeType: "application/json",
-          temperature: 0.2 // keep it highly deterministic
-        }
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json',
+          responseJsonSchema: GEMINI_RESPONSE_SCHEMA,
+          temperature: 0.2,
+        },
       });
 
       const rawOutput = response.text;
 
-      // Attempt to parse the strictly requested JSON array
-      let parsedArray;
+      if (typeof rawOutput !== 'string' || !rawOutput.trim()) {
+        throw new AppError(
+          'AI_RESPONSE_INVALID',
+          'The AI provider returned an empty response.',
+          502,
+        );
+      }
+
+      let parsedTasks;
       try {
-        parsedArray = JSON.parse(rawOutput);
-        console.log("\n--- RAW JSON FROM GEMINI ---");
-        console.log(JSON.stringify(parsedArray, null, 2));
-        console.log("----------------------------\n");
-      } catch (parseError) {
-        // Fallback cleanup if the model included nasty markdown codeblocks
-        const cleanedStr = rawOutput.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsedArray = JSON.parse(cleanedStr);
-        console.log("\n--- CLEANED RAW JSON FROM GEMINI ---");
-        console.log(JSON.stringify(parsedArray, null, 2));
-        console.log("------------------------------------\n");
+        parsedTasks = JSON.parse(rawOutput);
+      } catch {
+        throw new AppError(
+          'AI_RESPONSE_INVALID',
+          'The AI provider returned malformed JSON.',
+          502,
+        );
       }
 
-      if (!Array.isArray(parsedArray)) {
-        throw new Error("Target response was not a JSON array.");
-      }
-
-      // Map the generic {title, description} to the frontend Kanaban schema { id, content, tag, date }
-      const initialMappedTasks = parsedArray.map((item, index) => ({
-        id: `ai-${Date.now()}-${index}`,
-        content: `${item.title}: ${item.description}`,
-        tag: 'Pending',
-        date: 'Scheduled'
-      }));
-
-      console.log(`[AIService] Step 1 Complete. Initiating Hugging Face Orchestration for ${initialMappedTasks.length} tasks...`);
-
-      // STEP 2: Agentic Orchestration Loop
-      const categorizedTasks = await Promise.all(
-        initialMappedTasks.map(async (task) => {
-          const categorizedTag = await this.categorizeTaskWithHF(task.content);
-          return {
-            ...task,
-            tag: categorizedTag
-          };
-        })
+      const generatedTasks = validateGeneratedTasksPayload(parsedTasks);
+      const categories = await mapWithConcurrency(
+        generatedTasks,
+        this.hfConcurrency,
+        (task) => this.categorizeTaskWithHF(
+          `${task.title}. ${task.description}`,
+        ),
       );
 
-      console.log(`[AIService] Step 2 Complete. Orchestration mapping finished.`);
-
-      return categorizedTasks;
-
+      return generatedTasks.map((task, index) => validateCanonicalTask({
+        id: this.uuidFactory(),
+        ...task,
+        category: categories[index],
+        status: 'todo',
+      }));
     } catch (error) {
-      console.error("[AIService] Gemini API Error:", error);
-      throw error; // Re-throw to be caught by TaskController
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      throw new AppError(
+        'AI_PROVIDER_ERROR',
+        'The task-generation provider could not complete the request.',
+        502,
+      );
     }
   }
 }

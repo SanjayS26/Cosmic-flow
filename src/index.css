@@ -117,7 +117,8 @@ body {
 
 .column {
   flex: 0 0 350px;
-  min-height: 500px;
+  height: 65vh; /* Fixed height to enable internal scrolling */
+  max-height: 800px;
   display: flex;
   flex-direction: column;
   padding: 1.25rem;
@@ -136,13 +137,15 @@ body {
   gap: 1rem;
   flex-grow: 1;
   min-height: 150px; /* target area for empty columns */
+  overflow-y: auto; /* Enable scrolling */
+  padding-right: 0.5rem; /* Prevent scrollbar cutting off cards */
 }
 
 .task-card {
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.65rem;
 }
 
 .task-card.dragging {
@@ -159,8 +162,56 @@ body {
   color: #c9b3ff;
   padding: 0.2rem 0.6rem;
   border-radius: 4px;
-  align-self: flex-start;
   font-weight: 600;
+}
+
+.task-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.priority-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+
+.priority-high {
+  color: #ffb8b8;
+  background: rgba(255, 88, 88, 0.18);
+}
+
+.priority-medium {
+  color: #ffe0a3;
+  background: rgba(255, 180, 70, 0.16);
+}
+
+.priority-low {
+  color: #b7efc5;
+  background: rgba(76, 175, 80, 0.16);
+}
+
+.task-title {
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.task-description {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.column-empty {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 2rem 0.5rem;
 }
 
 /* Custom Scrollbar for columns wrapper */
@@ -261,7 +312,7 @@ body {
 .action-container {
   display: flex;
   justify-content: center;
-  margin: 0 auto 3rem;
+  margin: 0 auto 1.5rem;
 }
 
 .generate-btn {
@@ -289,4 +340,31 @@ body {
 .generate-btn:active {
   transform: translateY(1px);
   box-shadow: 0 2px 10px rgba(144, 98, 255, 0.4);
+}
+
+.generate-btn:disabled:hover {
+  transform: none;
+  filter: none;
+  box-shadow: 0 4px 15px rgba(144, 98, 255, 0.4);
+}
+
+.inline-message {
+  max-width: 800px;
+  margin: 0 auto 1.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.error-message {
+  color: #ffd0d0;
+  background: rgba(190, 45, 45, 0.18);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+}
+
+.info-message {
+  color: #d8ccff;
+  background: rgba(144, 98, 255, 0.14);
+  border: 1px solid rgba(144, 98, 255, 0.28);
 }

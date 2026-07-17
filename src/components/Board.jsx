@@ -1,48 +1,54 @@
-import React from 'react';
 import Column from './Column';
 
-const Board = ({ data, setData }) => {
-
+const Board = ({ data, setData, deleteTask }) => {
   const onDrop = (e, targetColumnId) => {
     const taskId = e.dataTransfer.getData('text/plain');
     if (!taskId) return;
 
-    // Find the source column
-    let sourceColumnId = null;
-    for (const [colId, col] of Object.entries(data.columns)) {
-      if (col.taskIds.includes(taskId)) {
-        sourceColumnId = colId;
-        break;
+    setData((previousData) => {
+      const targetColumn = previousData.columns[targetColumnId];
+      const sourceColumnEntry = Object.entries(previousData.columns).find(
+        ([, column]) => column.taskIds.includes(taskId),
+      );
+
+      if (!targetColumn || !sourceColumnEntry || !previousData.tasks[taskId]) {
+        return previousData;
       }
-    }
 
-    if (!sourceColumnId || sourceColumnId === targetColumnId) return;
+      const [sourceColumnId, sourceColumn] = sourceColumnEntry;
 
-    const sourceColumn = data.columns[sourceColumnId];
-    const targetColumn = data.columns[targetColumnId];
+      if (sourceColumnId === targetColumnId) {
+        return previousData;
+      }
 
-    // Remove from source
-    const newSourceTaskIds = Array.from(sourceColumn.taskIds);
-    newSourceTaskIds.splice(newSourceTaskIds.indexOf(taskId), 1);
+      const sourceTaskIds = sourceColumn.taskIds.filter((id) => id !== taskId);
+      const targetTaskIds = [
+        ...targetColumn.taskIds.filter((id) => id !== taskId),
+        taskId,
+      ];
 
-    // Add to target
-    const newTargetTaskIds = Array.from(targetColumn.taskIds);
-    newTargetTaskIds.push(taskId);
-
-    setData(prev => ({
-      ...prev,
-      columns: {
-        ...prev.columns,
-        [sourceColumnId]: {
-          ...sourceColumn,
-          taskIds: newSourceTaskIds,
+      return {
+        ...previousData,
+        tasks: {
+          ...previousData.tasks,
+          [taskId]: {
+            ...previousData.tasks[taskId],
+            status: targetColumn.status,
+          },
         },
-        [targetColumnId]: {
-          ...targetColumn,
-          taskIds: newTargetTaskIds,
-        }
-      }
-    }));
+        columns: {
+          ...previousData.columns,
+          [sourceColumnId]: {
+            ...sourceColumn,
+            taskIds: sourceTaskIds,
+          },
+          [targetColumnId]: {
+            ...targetColumn,
+            taskIds: targetTaskIds,
+          },
+        },
+      };
+    });
   };
 
   return (
@@ -50,7 +56,9 @@ const Board = ({ data, setData }) => {
       <div className="columns-wrapper">
         {data.columnOrder.map((columnId) => {
           const column = data.columns[columnId];
-          const tasks = column.taskIds.map((taskId) => data.tasks[taskId]);
+          const tasks = column.taskIds
+            .map((taskId) => data.tasks[taskId])
+            .filter(Boolean);
 
           return (
             <Column
@@ -58,6 +66,7 @@ const Board = ({ data, setData }) => {
               column={column}
               tasks={tasks}
               onDrop={onDrop}
+              deleteTask={deleteTask}
             />
           );
         })}
