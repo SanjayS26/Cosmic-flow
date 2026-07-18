@@ -1,26 +1,287 @@
-# 🚀 AI Task Deconstructor
+# AI-Powered Task Deconstructor
 
-An AI-powered project management dashboard that takes overwhelming, high-level goals and automatically breaks them down into an actionable, categorized Kanban workflow. 
+AI-Powered Task Deconstructor is a multi-user project-planning platform that converts complex goals into actionable, categorized, and prioritized tasks. Each user manages private projects in persistent PostgreSQL-backed Kanban boards, combining AI-assisted planning with practical execution tracking.
 
-Unlike standard chat interfaces, this application utilizes a **multi-model AI Pipeline** to not only generate sub-tasks but autonomously categorize and prioritize them using zero-shot classification before rendering them in an interactive drag-and-drop UI.
+## Problem statement
+
+Large goals are difficult to translate into a reliable sequence of manageable actions. Manual planning takes time, varies in quality, and often misses dependencies or realistic estimates, while generic AI responses tend to be unstructured and disconnected from the tools used to execute the work. Users need project planning that is organized, persistent, interactive, and isolated from other users.
+
+## Solution
+
+The application turns a project goal and its planning context into a structured workflow:
+
+- Gemini decomposes the goal into 10–15 actionable task objects.
+- Hugging Face zero-shot classification assigns each task a practical category.
+- Every task receives a priority, estimated duration, status, and board position.
+- PostgreSQL permanently stores user-specific projects and tasks.
+- A three-column Kanban board supports execution tracking, editing, regeneration, movement, and reordering.
+- Email/password authentication and backend ownership checks isolate each user's data.
+
+## Key features
+
+- Secure email/password registration and login
+- Multi-user project and task isolation
+- AI generation of 10–15 structured tasks
+- Zero-shot classification into five canonical categories
+- Priority and estimated-duration planning
+- To Do, In Progress, and Done Kanban columns
+- Drag-and-drop movement between columns
+- Same-column task reordering
+- Task editing and deletion
+- Individual AI task regeneration
+- Dedicated task-detail pages
+- Persistent PostgreSQL storage
+
+## Application screenshots
 
 
-## ✨ Features
-* **Intelligent Task Generation:** Input a single broad goal, and the integrated LLM acts as a virtual project manager, breaking the project down into 10-15 highly granular steps.
-* **Automated Categorization:** Leverages Hugging Face zero-shot classification to automatically analyze the context of each generated task, assigning departmental tags (e.g., Engineering, Marketing, Design) and priority levels.
-* **Interactive Kanban Board:** Fully functional drag-and-drop interface to manage tasks across "To Do", "In Progress", and "Done" states.
-* **Seamless API Pipeline:** A custom REST API backend orchestrates the strict data flow between the client, the LLM generation engine, and the Hugging Face analysis model.
+*Secure account access using email/password authentication and HTTP-only cookie sessions.*
 
-## 🛠️ Tech Stack
-* **Frontend:** React, Vite, [Insert State Management e.g., Zustand/Redux], [Insert Drag-and-Drop library e.g., dnd-kit]
-* **Backend:** REST API built with [Insert Python/FastAPI or Node/Express]
-* **Generative AI:** [Insert Gemini/OpenAI/Claude] API for structured JSON task generation
-* **Machine Learning:** Hugging Face Inference API (`facebook/bart-large-mnli`) for zero-shot text classification
+![User project dashboard](docs/screenshots/dashboard.png)
 
-## 🧠 Architecture Flow
-This application utilizes a deterministic AI Pipeline (rather than autonomous agents) to ensure high reliability, speed, and strict JSON formatting:
-1. **User Input:** Client submits a complex goal via the React frontend.
-2. **Generation Phase:** The backend routes the prompt to the LLM with strict formatting instructions to output an array of task objects.
-3. **Enrichment Phase:** The backend iterates through the generated array, piping each task description through a Hugging Face classification model to append categorical labels and priority scores.
-4. **Render:** The enriched JSON payload is returned to the client and dynamically mapped to the interactive Kanban board.
+*A user-specific dashboard for creating, opening, editing, and deleting projects.*
 
+![Database-backed Kanban board](docs/screenshots/project-board.png)
+
+*Generated tasks organized across To Do, In Progress, and Done columns.*
+
+## How the AI pipeline works
+
+1. A user creates a project with a goal, timeframe, team size, and planning strictness.
+2. React sends a project-specific generation request to the Express REST API.
+3. The backend authenticates the user, verifies project ownership, and validates the project context.
+4. Gemini returns structured task objects using a constrained JSON schema.
+5. Hugging Face classifies each task using zero-shot classification.
+6. The backend validates and normalizes every task into the canonical schema.
+7. All generated tasks are inserted into PostgreSQL inside one transaction.
+8. The frontend renders the saved tasks on the Kanban board.
+
+If classification is unavailable or returns malformed data, the backend applies a controlled `Research` fallback instead of failing the complete generation request.
+
+## Architecture
+
+```text
+User Browser
+    |
+    v
+React + Vite + React Router
+    |
+    v
+Express REST API
+    |
+    v
+Authentication / Validation / Rate Limiting
+    |\
+    | +------------------> Gemini API
+    | +------------------> Hugging Face API
+    v
+PostgreSQL
+```
+
+- **Browser layer:** Renders routed authentication, dashboard, Kanban, editor, and task-detail interfaces.
+- **API layer:** Coordinates REST requests, safe error responses, AI orchestration, and persistence.
+- **Security layer:** Verifies HTTP-only JWT sessions, validates input, limits requests, and enforces ownership.
+- **Repository layer:** Keeps parameterized SQL and snake_case-to-camelCase mapping outside controllers.
+- **Database layer:** Stores normalized users, projects, and ordered tasks with relational constraints.
+- **AI layer:** Generates structured work and enriches it with category classification.
+
+## Technology stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Frontend | React | Component-based application and state management |
+| Frontend | Vite | Development tooling and optimized production builds |
+| Frontend | React Router | Public, protected, project, and task-detail routing |
+| Backend | Node.js | Server-side JavaScript runtime |
+| Backend | Express | REST API, middleware, controllers, and route composition |
+| Database | PostgreSQL | Permanent relational storage and transactional consistency |
+| Database | `pg` | Connection pooling and raw PostgreSQL queries |
+| Database | Raw parameterized SQL | Explicit joins, ownership filters, constraints, and transactions |
+| Authentication | `bcryptjs` | Password hashing and verification |
+| Authentication | JWT | Signed session identity using a minimal `sub` payload |
+| Authentication | HTTP-only cookies | Browser session transport without JavaScript token access |
+| AI | Gemini API | Structured goal decomposition and task regeneration |
+| AI | Hugging Face zero-shot classification | Task categorization without task-specific model training |
+| Testing | Vitest | Frontend unit and integration tests |
+| Testing | React Testing Library | User-focused component and routing tests |
+| Testing | Node.js test runner | Backend API, service, authorization, and transaction tests |
+| Security | CORS, rate limits, validation, ownership checks | Restricts request origins, abuse, malformed input, and cross-user access |
+| Security | Parameterized SQL and HTTP-only cookies | Reduces SQL injection and browser-token exposure risks |
+
+## Database design
+
+```mermaid
+erDiagram
+    USERS ||--o{ PROJECTS : owns
+    PROJECTS ||--o{ TASKS : contains
+
+    USERS {
+        UUID id PK
+        VARCHAR name
+        VARCHAR email UK
+        VARCHAR password_hash
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    PROJECTS {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR name
+        VARCHAR goal
+        VARCHAR timeframe
+        SMALLINT team_size
+        VARCHAR strictness
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    TASKS {
+        UUID id PK
+        UUID project_id FK
+        VARCHAR title
+        VARCHAR description
+        VARCHAR category
+        VARCHAR priority
+        VARCHAR status
+        VARCHAR estimated_duration
+        INTEGER position
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+```
+
+UUID primary keys identify every record. `projects.user_id` references `users.id`, while `tasks.project_id` references `projects.id`; both relationships use `ON DELETE CASCADE`. Database checks enforce non-empty fields, normalized lowercase email, team-size bounds, canonical category/priority/status values, and non-negative positions.
+
+Indexes support email lookup, user project listing, recently updated projects, project task lookup, and ordered `(project_id, status, position)` board queries. The normalized user → project → task design avoids duplicated ownership data while `position` preserves ordering within each status column.
+
+## API overview
+
+| Area | Method | Route | Purpose |
+|---|---|---|---|
+| Authentication | `POST` | `/api/auth/register` | Create an account and session |
+| Authentication | `POST` | `/api/auth/login` | Authenticate with generic credential errors |
+| Authentication | `GET` | `/api/auth/me` | Restore the authenticated user |
+| Authentication | `POST` | `/api/auth/logout` | Clear the session cookie |
+| Projects | `GET` | `/api/projects` | List the current user's projects |
+| Projects | `POST` | `/api/projects` | Create a project |
+| Projects | `GET` | `/api/projects/:projectId` | Read an owned project |
+| Projects | `PATCH` | `/api/projects/:projectId` | Update an owned project |
+| Projects | `DELETE` | `/api/projects/:projectId` | Delete a project and its tasks |
+| Tasks | `GET` | `/api/projects/:projectId/tasks` | List ordered project tasks |
+| Tasks | `POST` | `/api/projects/:projectId/tasks` | Create a task |
+| Tasks | `GET` | `/api/projects/:projectId/tasks/:taskId` | Read a task |
+| Tasks | `PATCH` | `/api/projects/:projectId/tasks/:taskId` | Update allowed task fields |
+| Tasks | `DELETE` | `/api/projects/:projectId/tasks/:taskId` | Delete a task |
+| Tasks | `PATCH` | `/api/projects/:projectId/tasks/reorder` | Persist movement and ordering transactionally |
+| AI | `POST` | `/api/projects/:projectId/generate-tasks` | Generate, classify, validate, and save tasks |
+| AI | `POST` | `/api/projects/:projectId/tasks/:taskId/regenerate` | Replace mutable task fields with AI output |
+
+## Authentication and authorization
+
+- Passwords are hashed with `bcryptjs`; plain-text passwords and password hashes are never returned.
+- JWTs contain only the user identifier in `sub` and are stored in HTTP-only cookies.
+- Protected API and frontend routes require an authenticated session.
+- Every protected project query combines the requested project ID with the authenticated user ID.
+- Every task operation verifies both project ownership and task membership.
+- Changing a URL cannot provide access to another user's project or task; inaccessible resources return the same 404 response as nonexistent resources.
+- Login uses the same generic error for unknown emails and incorrect passwords, avoiding account-existence disclosure.
+
+## Raw SQL implementation
+
+The backend intentionally uses raw PostgreSQL rather than an ORM. This provides direct control over SQL behavior and demonstrates practical use of:
+
+- `$1`, `$2`, and `$3` parameter placeholders
+- Ownership-filtered queries and relational joins
+- PostgreSQL connection pooling
+- Foreign keys and cascade behavior
+- Check constraints and performance-oriented indexes
+- Numbered schema migrations and migration tracking
+- Transactions with commit and rollback behavior
+- Explicit snake_case database to camelCase API mapping
+
+AI-generated tasks are inserted in one PostgreSQL transaction, preventing a partial board if any task fails validation or insertion. Reordering also verifies every task and updates the complete set transactionally.
+
+## Canonical task schema
+
+```json
+{
+  "id": "uuid",
+  "title": "Create application wireframes",
+  "description": "Design wireframes for the main user flows.",
+  "category": "Design",
+  "priority": "High",
+  "status": "todo",
+  "estimatedDuration": "2 days",
+  "position": 0
+}
+```
+
+**Allowed categories**
+
+- Engineering
+- Design
+- Marketing
+- Research
+- Logistics
+
+**Allowed priorities**
+
+- High
+- Medium
+- Low
+
+**Allowed statuses**
+
+- `todo`
+- `in-progress`
+- `done`
+
+## Reliability and security
+
+Implemented defense-in-depth measures include:
+
+- Strict request and canonical task validation
+- Consistent safe API error structures
+- Separate authentication and AI endpoint rate limits
+- Explicit credential-aware CORS origins
+- Configurable JSON body limits
+- Parameterized SQL for all user-provided values
+- HTTP-only authentication cookies
+- `bcryptjs` password hashing
+- Project and task ownership verification
+- PostgreSQL check constraints and foreign keys
+- Transactional task generation and task reordering
+- Hugging Face request timeout and controlled fallback category
+- Frontend API timeout and optimistic rollback behavior
+- Server-side AI calls that keep provider credentials out of frontend bundles
+
+These protections improve the application's security posture, but they are not a claim of complete production security.
+
+
+## Important engineering decisions
+
+- **Express was retained instead of migrating to FastAPI:** the existing backend was stable, integrated, and covered by tests, making an ecosystem migration unnecessary for the project's current goals.
+- **Raw PostgreSQL was chosen instead of Prisma:** explicit SQL demonstrates query design, joins, transactions, constraints, indexes, migrations, and ownership filtering.
+- **HTTP-only cookies were chosen instead of JWTs in `localStorage`:** frontend JavaScript cannot read the authentication token.
+- **PostgreSQL replaced browser storage as the source of truth:** projects and tasks persist across browsers and sessions after authentication.
+- **AI calls remain server-side:** Gemini and Hugging Face credentials are never shipped to the browser.
+- **Provider failures preserve user data:** failed generation or regeneration does not remove existing tasks, and failed optimistic board updates roll back in the UI.
+
+## Challenges solved
+
+- Producing reliable structured output from a general-purpose LLM
+- Rejecting empty, malformed, or incomplete AI responses
+- Applying zero-shot category classification with a controlled fallback
+- Enforcing user-specific authorization at the database boundary
+- Inserting multiple AI-generated tasks transactionally
+- Persisting cross-column drag-and-drop movement
+- Preserving same-column ordering without duplicates or lost tasks
+- Rolling back optimistic UI state when persistence fails
+- Configuring secure JWT cookie sessions and credential-aware CORS
+- Running ordered, idempotent raw SQL migrations
+- Transitioning from legacy `localStorage` boards without silently uploading or deleting them
+
+## Project value
+
+This project demonstrates end-to-end full-stack engineering across React interfaces, REST API design, authentication, authorization, PostgreSQL, raw SQL, relational normalization, migrations, and transactional operations. It also shows practical AI orchestration and prompt/schema design, third-party API integration, interactive state management, optimistic updates, automated testing, and security-aware engineering—bringing AI-generated output into a persistent application workflow rather than presenting it as an isolated chatbot response.
