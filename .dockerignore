@@ -1,0 +1,27 @@
+# Dependencies and generated output
+node_modules
+dist
+coverage
+
+# Secrets and local environment configuration
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+
+# Source control, editor state, tests, and documentation not needed to build
+.git
+.gitignore
+.vscode
+.idea
+.run
+*.log
+src/**/*.test.*
+src/test
+docs
+server/tests
+server/.dockerignore
+server/Dockerfile
+README.md

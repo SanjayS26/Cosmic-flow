@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Test, build, and validate Docker images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Test frontend
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+      # Audit findings are reported but do not block CI while the existing
+      # dependency findings are being addressed separately.
+      - name: Audit frontend production dependencies
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Test backend
+        working-directory: server
+        run: npm test
+
+      - name: Check backend source
+        working-directory: server
+        run: npm run check
+
+      - name: Audit backend production dependencies
+        working-directory: server
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+      - name: Build frontend Docker image
+        run: docker build --tag ai-task-deconstructor-frontend:ci .
+
+      - name: Build backend Docker image
+        run: docker build --tag ai-task-deconstructor-backend:ci ./server

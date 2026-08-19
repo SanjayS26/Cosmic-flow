@@ -1,58 +1,37 @@
 import Column from './Column';
-
-const Board = ({ data, setData, deleteTask }) => {
-  const onDrop = (e, targetColumnId) => {
+const Board = ({
+  data,
+  onMove,
+  deleteTask,
+  editTask,
+  viewTask,
+  regenerateTask,
+  regenerationState,
+  isGenerating,
+}) => {
+  const onDrop = (e, targetColumnId, targetIndex) => {
     const taskId = e.dataTransfer.getData('text/plain');
     if (!taskId) return;
 
-    setData((previousData) => {
-      const targetColumn = previousData.columns[targetColumnId];
-      const sourceColumnEntry = Object.entries(previousData.columns).find(
-        ([, column]) => column.taskIds.includes(taskId),
-      );
-
-      if (!targetColumn || !sourceColumnEntry || !previousData.tasks[taskId]) {
-        return previousData;
-      }
-
-      const [sourceColumnId, sourceColumn] = sourceColumnEntry;
-
-      if (sourceColumnId === targetColumnId) {
-        return previousData;
-      }
-
-      const sourceTaskIds = sourceColumn.taskIds.filter((id) => id !== taskId);
-      const targetTaskIds = [
-        ...targetColumn.taskIds.filter((id) => id !== taskId),
-        taskId,
-      ];
-
-      return {
-        ...previousData,
-        tasks: {
-          ...previousData.tasks,
-          [taskId]: {
-            ...previousData.tasks[taskId],
-            status: targetColumn.status,
-          },
-        },
-        columns: {
-          ...previousData.columns,
-          [sourceColumnId]: {
-            ...sourceColumn,
-            taskIds: sourceTaskIds,
-          },
-          [targetColumnId]: {
-            ...targetColumn,
-            taskIds: targetTaskIds,
-          },
-        },
-      };
-    });
+    onMove(taskId, targetColumnId, targetIndex);
   };
+
+  const taskCount = Object.keys(data.tasks).length;
 
   return (
     <div className="board-container">
+      {isGenerating && (
+        <div className="board-loading" role="status">
+          <span className="spinner" aria-hidden="true" />
+          Building your task board...
+        </div>
+      )}
+      {taskCount === 0 && (
+        <div className="empty-board">
+          <h2>Your board is empty</h2>
+          <p>Generate tasks or add one manually to start this workflow.</p>
+        </div>
+      )}
       <div className="columns-wrapper">
         {data.columnOrder.map((columnId) => {
           const column = data.columns[columnId];
@@ -67,6 +46,10 @@ const Board = ({ data, setData, deleteTask }) => {
               tasks={tasks}
               onDrop={onDrop}
               deleteTask={deleteTask}
+              editTask={editTask}
+              viewTask={viewTask}
+              regenerateTask={regenerateTask}
+              regenerationState={regenerationState}
             />
           );
         })}

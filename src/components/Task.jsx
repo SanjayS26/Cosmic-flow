@@ -1,4 +1,12 @@
-const Task = ({ task, deleteTask }) => {
+const Task = ({
+  task,
+  deleteTask,
+  editTask,
+  viewTask,
+  regenerateTask,
+  regeneration,
+  onDrop,
+}) => {
   const handleDragStart = (e) => {
     e.dataTransfer.setData('text/plain', task.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -25,6 +33,8 @@ const Task = ({ task, deleteTask }) => {
       draggable="true"
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
       onContextMenu={handleContextMenu}
       id={task.id}
     >
@@ -37,6 +47,21 @@ const Task = ({ task, deleteTask }) => {
       <h3 className="task-title">{task.title}</h3>
       <p className="text-body task-description">{task.description}</p>
       <p className="text-meta">Estimated: {task.estimatedDuration}</p>
+      <div className="task-actions">
+        <button type="button" onClick={() => viewTask(task.id)}>Details</button>
+        <button type="button" onClick={() => editTask(task.id)}>Edit</button>
+        <button
+          type="button"
+          onClick={() => regenerateTask(task.id)}
+          disabled={regeneration?.loading}
+        >
+          {regeneration?.loading ? 'Regenerating...' : 'Regenerate'}
+        </button>
+        <button type="button" className="danger-action" onClick={() => deleteTask(task.id)}>Delete</button>
+      </div>
+      {regeneration?.error && (
+        <p className="task-error" role="alert">{regeneration.error}</p>
+      )}
     </div>
   );
 };

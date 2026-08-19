@@ -1,10 +1,25 @@
 import Task from './Task';
 
-const Column = ({ column, tasks, onDrop, deleteTask }) => {
+const Column = ({
+  column,
+  tasks,
+  onDrop,
+  deleteTask,
+  editTask,
+  viewTask,
+  regenerateTask,
+  regenerationState,
+}) => {
   const handleDrop = (e) => {
     e.preventDefault();
     e.currentTarget.classList.remove('drag-over');
-    onDrop(e, column.id);
+    onDrop(e, column.id, tasks.length);
+  };
+
+  const handleTaskDrop = (e, targetIndex) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDrop(e, column.id, targetIndex);
   };
 
   const handleDragOver = (e) => {
@@ -31,7 +46,19 @@ const Column = ({ column, tasks, onDrop, deleteTask }) => {
       <div className="task-list">
         {tasks.length > 0 ? (
           tasks.map((task) => (
-            <Task key={task.id} task={task} deleteTask={deleteTask} />
+            <Task
+              key={task.id}
+              task={task}
+              deleteTask={deleteTask}
+              editTask={editTask}
+              viewTask={viewTask}
+              regenerateTask={regenerateTask}
+              regeneration={regenerationState[task.id]}
+              onDrop={(event) => handleTaskDrop(
+                event,
+                tasks.findIndex((item) => item.id === task.id),
+              )}
+            />
           ))
         ) : (
           <p className="column-empty">No tasks in this column.</p>

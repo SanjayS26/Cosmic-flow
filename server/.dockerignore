@@ -1,0 +1,20 @@
+# Dependencies and generated or local-only files
+node_modules
+coverage
+*.log
+
+# Never bake credentials into an image.
+.env
+.env.*
+!.env.example
+
+# Source control, tests, and editor metadata are not needed at runtime.
+.git
+.gitignore
+.vscode
+.idea
+.run
+tests
+README.md
+Dockerfile
+.dockerignore

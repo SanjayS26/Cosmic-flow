@@ -17,12 +17,17 @@ export function createApp({
   allowedOrigins = parseAllowedOrigins(),
   bodyLimit = process.env.JSON_BODY_LIMIT || '20kb',
   environment = process.env.NODE_ENV,
+  trustProxy = process.env.TRUST_PROXY === 'true',
   databaseHealthCheck = checkDatabaseHealth,
   apiDependencies = {},
 } = {}) {
   const app = express();
 
   app.disable('x-powered-by');
+  if (trustProxy) {
+    // The Docker deployment has one trusted Nginx proxy in front of Express.
+    app.set('trust proxy', 1);
+  }
   app.use(cors(createCorsOptions(allowedOrigins)));
   app.use(cookieParser());
   app.use(express.json({ limit: bodyLimit }));

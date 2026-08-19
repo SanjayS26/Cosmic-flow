@@ -85,6 +85,41 @@ PostgreSQL
 - **Database layer:** Stores normalized users, projects, and ordered tasks with relational constraints.
 - **AI layer:** Generates structured work and enriches it with category classification.
 
+## Docker deployment (local)
+
+The repository includes a production-style local Docker Compose stack. The frontend is built once with Vite and served by Nginx; the Vite development server is not used in the container. Nginx serves the React single-page application and proxies same-origin `/api` and `/health` requests to the Express backend. The backend connects to PostgreSQL through Docker's internal `postgres` service name, and calls Gemini and Hugging Face using runtime environment variables.
+
+```text
+Browser → frontend (Nginx, localhost:8080) → backend (Express) → PostgreSQL
+                                               ├→ Gemini API
+                                               └→ Hugging Face API
+```
+
+PostgreSQL data is stored in the named `postgres_data` Docker volume, so it persists across container restarts. PostgreSQL has no host port mapping and is reachable only by the containers on the Compose network. A one-time `migrate` service waits for PostgreSQL health, runs the existing idempotent migrations, then allows the backend to start.
+
+Create a local Docker environment file from the safe template, fill in real secrets, then start the stack:
+
+```powershell
+Copy-Item .env.docker.example .env.docker
+# Edit .env.docker and set POSTGRES_PASSWORD, JWT_SECRET, GEMINI_API_KEY, and HF_API_KEY.
+docker compose --env-file .env.docker up --build
+```
+
+Open `http://localhost:8080`. The backend is available locally at `http://localhost:3000`, and its health check is also proxied at `http://localhost:8080/health`.
+
+Useful commands:
+
+```powershell
+docker compose --env-file .env.docker ps
+docker compose --env-file .env.docker logs -f migrate backend frontend
+docker compose --env-file .env.docker run --rm migrate
+docker compose --env-file .env.docker down
+```
+
+`docker compose --env-file .env.docker down` keeps the database volume. To intentionally remove all local database data, run `docker compose --env-file .env.docker down -v`.
+
+The existing non-Docker development workflow remains unchanged: use the root `npm run dev` for Vite and `cd server; npm run dev` for Express with the existing local `.env` files.
+
 ## Technology stack
 
 | Layer | Technology | Purpose |
