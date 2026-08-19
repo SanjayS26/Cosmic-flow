@@ -51,6 +51,8 @@ services:
       context: ./server
       dockerfile: Dockerfile
     environment: *backend_environment
+    # Compose has a dedicated migration service, so avoid running it twice here.
+    command: ["npm", "start"]
     depends_on:
       postgres:
         condition: service_healthy

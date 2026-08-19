@@ -120,6 +120,58 @@ docker compose --env-file .env.docker down
 
 The existing non-Docker development workflow remains unchanged: use the root `npm run dev` for Vite and `cd server; npm run dev` for Express with the existing local `.env` files.
 
+## Render deployment
+
+Deploy the frontend as a **Render Static Site**, not as the root Nginx Docker image. The Nginx configuration is intentionally for local Docker Compose, where `backend` is an internal Compose service name. A Render Static Site has no access to that hostname.
+
+Create the backend and Render Postgres database in the same Render region, then create the static site after the backend has a public HTTPS URL.
+
+### Frontend Static Site
+
+| Render setting | Value |
+|---|---|
+| Service type | Static Site |
+| Root directory | Repository root |
+| Build command | `npm ci && npm run build` |
+| Publish directory | `dist` |
+| Environment variable | `SKIP_INSTALL_DEPS=true` |
+| Environment variable | `NODE_VERSION=22` |
+| Environment variable | `VITE_API_BASE_URL=https://your-backend-name.onrender.com` |
+
+`VITE_API_BASE_URL` is embedded by Vite at build time. Do not include a trailing slash, and redeploy the static site after changing it. In the Static Site **Redirects/Rewrites** settings, add a **Rewrite** rule with source `/*` and destination `/index.html`; this keeps direct React Router navigation and page refreshes working.
+
+### Backend Docker Web Service
+
+| Render setting | Value |
+|---|---|
+| Service type | Web Service |
+| Runtime | Docker |
+| Root directory | `server` |
+| Dockerfile path | `Dockerfile` |
+| Health check path | `/health` |
+| Region | Same region as the Render Postgres database |
+
+The Docker image runs the existing idempotent migrations before starting Express. Render provides `PORT`; the server binds to `0.0.0.0` and honors that value.
+
+Set these backend environment variables in Render. Values marked secret must be entered in the Render dashboard and never committed.
+
+| Variable | Value |
+|---|---|
+| `NODE_ENV` | `production` |
+| `TRUST_PROXY` | `true` |
+| `DATABASE_URL` | Render Postgres **Internal Database URL** |
+| `DATABASE_SSL` | `false` for the internal URL |
+| `JWT_SECRET` | A long random secret (secret) |
+| `GEMINI_API_KEY` | Gemini credential (secret) |
+| `HF_API_KEY` | Hugging Face credential (secret) |
+| `CLIENT_ORIGIN` | Exact frontend URL, for example `https://your-frontend-name.onrender.com` |
+| `AUTH_COOKIE_SECURE` | `true` |
+| `AUTH_COOKIE_SAME_SITE` | `lax` |
+
+`CLIENT_ORIGIN` is the CORS allowlist; use only the deployed frontend URL, without a trailing slash. Render's `*.onrender.com` frontend and backend URLs are HTTPS and same-site, so the existing HTTP-only `SameSite=Lax` cookie works with credentialed API requests. If you later use custom domains, keep the frontend and backend under the same registrable domain (for example, `app.example.com` and `api.example.com`) to preserve this behavior.
+
+The following remain Docker Compose-only: the root frontend Dockerfile, Nginx proxy, service name `backend`, service name `postgres`, local port mappings, and the `postgres_data` Docker volume.
+
 ## Technology stack
 
 | Layer | Technology | Purpose |

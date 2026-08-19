@@ -27,4 +27,6 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+# Migrations are idempotent and protected by a PostgreSQL advisory lock. This
+# initializes a newly provisioned managed database before the web server starts.
+CMD ["sh", "-c", "npm run migrate && exec npm start"]
